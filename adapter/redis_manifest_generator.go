@@ -21,6 +21,7 @@ const (
 	RedisJobName                      = "redis-server"
 	HealthCheckErrandName             = "health-check"
 	CleanupDataErrandName             = "cleanup-data"
+	TrainingInsertErrandName          = "training-insert"
 	LifecycleErrandType               = "errand"
 )
 
@@ -181,6 +182,36 @@ func (m ManifestGenerator) GenerateManifest(
 		})
 	}
 
+        trainingInsertInstanceGroup := findTrainingInsertInstanceGroup(plan)
+
+        if trainingInsertInstanceGroup != nil {
+                trainingInsertProperties := m.trainingInsertProperties(plan.Properties)
+
+                trainingInsertJob, err := gatherTrainingInsertJob(serviceDeployment.Releases)
+
+                if err != nil {
+                        return serviceadapter.GenerateManifestOutput{}, err
+                }
+
+                trainingInsertJobs := []bosh.Job{trainingInsertJob}
+                trainingInsertNetworks := mapNetworksToBoshNetworks(trainingInsertInstanceGroup.Networks)
+
+                instanceGroups = append(instanceGroups, bosh.InstanceGroup{
+                        Name:               trainingInsertErrandName,
+                        Instances:          trainingInsertInstanceGroup.Instances,
+                        Jobs:               trainingInsertJobs,
+                        VMType:             trainingInsertInstanceGroup.VMType,
+                        VMExtensions:       trainingInsertInstanceGroup.VMExtensions,
+                        PersistentDiskType: trainingInsertInstanceGroup.PersistentDiskType,
+                        Stemcell:           stemcellAlias,
+                        Networks:           trainingInsertNetworks,
+                        AZs:                trainingInsertInstanceGroup.AZs,
+                        Lifecycle:          LifecycleErrandType,
+                        Properties:         trainingInsertProperties,
+                })
+        }
+
+
 	cleanupDataInstanceGroup := findCleanupDataInstanceGroup(plan)
 
 	if cleanupDataInstanceGroup != nil {
@@ -310,6 +341,10 @@ func findHealthCheckInstanceGroup(plan serviceadapter.Plan) *serviceadapter.Inst
 	return findInstanceGroup(plan, HealthCheckErrandName)
 }
 
+func findTrainingInsertInstanceGroup(plan serviceadapter.Plan) *serviceadapter.InstanceGroup {
+        return findInstanceGroup(plan, TrainingInsertErrandName)
+}
+
 func findCleanupDataInstanceGroup(plan serviceadapter.Plan) *serviceadapter.InstanceGroup {
 	return findInstanceGroup(plan, CleanupDataErrandName)
 }
@@ -394,6 +429,10 @@ func (m *ManifestGenerator) gatherRedisServerJob(releases serviceadapter.Service
 
 func gatherHealthCheckJob(releases serviceadapter.ServiceReleases) (bosh.Job, error) {
 	return gatherJob(releases, HealthCheckErrandName)
+}
+
+func gatherTrainingInsertJob(releases serviceadapter.ServiceReleases) (bosh.Job, error) {
+        return gatherJob(releases, TrainingInsertErrandName)
 }
 
 func gatherCleanupDataJob(releases serviceadapter.ServiceReleases) (bosh.Job, error) {
@@ -538,6 +577,12 @@ func (m *ManifestGenerator) healthCheckProperties(
 	planProperties serviceadapter.Properties,
 ) map[string]interface{} {
 	return errandProperties(HealthCheckErrandName, planProperties)
+}
+
+func (m *ManifestGenerator) trainingInsertProperties(
+        planProperties serviceadapter.Properties,
+) map[string]interface{} {
+        return errandProperties(TrainingInsertErrandName, planProperties)
 }
 
 func (m *ManifestGenerator) cleanupDataProperties(
